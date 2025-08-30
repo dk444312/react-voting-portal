@@ -1,0 +1,3 @@
+
+export const SUPABASE_URL = 'https://ycjhhdhalisencahifsq.supabase.co';
+export const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InljamhoZGhhbGlzZW5jYWhpZnNxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTUwNjgyMTIsImV4cCI6MjA3MDY0NDIxMn0.wRDFiWOAZWKD8ztSeCE2hKlKndtg1XXa2b6C0HIPI_s';

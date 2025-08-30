@@ -1,0 +1,5 @@
+{
+  "name": "React Voting Portal",
+  "description": "A modern, responsive voting portal built with React, TypeScript, and Tailwind CSS for managing elections, allowing admin-operated physical voting and displaying live results.",
+  "requestFramePermissions": []
+}
