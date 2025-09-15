@@ -1,14 +1,14 @@
 
 import { createClient } from '@supabase/supabase-js';
 import { SUPABASE_URL, SUPABASE_ANON_KEY } from '../constants';
-import type { Candidate, VotePayload, Admin, ResultsStats } from '../types';
+import type { Candidate, VotePayload, Admin, ResultsStats, Voter } from '../types';
 
 const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
-export const loginAdmin = async (username: string, password: string): Promise<Admin> => {
+export const loginAdmin = async (username: string, password: string): Promise<Pick<Admin, 'username'>> => {
     const { data, error } = await supabase
         .from('directors')
-        .select('*')
+        .select('username')
         .eq('username', username)
         .eq('password', password)
         .single();
@@ -18,28 +18,69 @@ export const loginAdmin = async (username: string, password: string): Promise<Ad
     return { username: data.username };
 };
 
-export const startVotingProcess = async (regNumber: string, program: string): Promise<void> => {
-    // Check if voter has already voted
-    const { data: existingVoter, error: checkError } = await supabase
-        .from('voters')
-        .select('has_voted')
-        .eq('username', regNumber)
-        .single();
+export const startVotingProcess = async (regNumber: string, studentName: string): Promise<Voter> => {
+    const upperRegNumber = regNumber.trim().toUpperCase();
+    const trimmedStudentName = studentName.trim();
 
-    if (checkError && checkError.code !== 'PGRST116') { // PGRST116: no rows found
-        throw new Error(checkError.message);
+    // Step 1: Verify student details against the official registration list
+    const { data: registration, error: regError } = await supabase
+        .from('registrations')
+        .select('student_name')
+        .eq('registration_number', upperRegNumber)
+        .single();
+    
+    // Improved error handling for better user feedback
+    if (regError && regError.code !== 'PGRST116') { // PGRST116 means no rows found
+        throw new Error('A database error occurred during verification.');
+    }
+    if (!registration) {
+        throw new Error('Registration number not found. Please check the number and try again.');
+    }
+    if (registration.student_name.trim().toLowerCase() !== trimmedStudentName.toLowerCase()) {
+        throw new Error('The student name does not match the provided registration number.');
     }
 
-    if (existingVoter?.has_voted) {
+    // Step 2: Check if this registration number has already been used to vote
+    const { data: existingVoter, error: voterError } = await supabase
+        .from('voters')
+        .select('*')
+        .eq('registration_number', upperRegNumber)
+        .maybeSingle();
+
+    if (voterError) {
+        throw new Error('A database error occurred while checking voter status.');
+    }
+
+    if (existingVoter && existingVoter.has_voted) {
         throw new Error('This student has already cast their vote.');
     }
+    
+    // If voter exists but hasn't voted, return them to resume the session
+    if (existingVoter) {
+        return existingVoter as Voter;
+    }
 
-    // Upsert voter to ensure they exist in the database
-    const { error: upsertError } = await supabase
+    // Step 3: Create a new voter record if one doesn't exist
+    const { data: newVoter, error: insertError } = await supabase
         .from('voters')
-        .upsert({ username: regNumber, password: 'N/A', has_voted: false }, { onConflict: 'username' });
+        .insert({
+            username: upperRegNumber,
+            password: null,
+            full_name: registration.student_name,
+            registration_number: upperRegNumber,
+            has_voted: false,
+        })
+        .select()
+        .single();
+    
+    if (insertError) {
+        throw new Error('Failed to create a new voter session.');
+    }
+    if (!newVoter) {
+        throw new Error('Could not initialize a voter session.');
+    }
 
-    if (upsertError) throw new Error(upsertError.message);
+    return newVoter as Voter;
 };
 
 export const fetchCandidates = async (): Promise<Candidate[]> => {
@@ -76,9 +117,7 @@ export const getLiveVoteCount = async (): Promise<number> => {
     return count || 0;
 };
 
-
 export const submitPhysicalVote = async (votes: VotePayload, voterRegNumber: string, adminOperator: string) => {
-    // 1. Record the vote in physical_votes table
     const { error: voteError } = await supabase
         .from('physical_votes')
         .insert([{ 
@@ -90,14 +129,12 @@ export const submitPhysicalVote = async (votes: VotePayload, voterRegNumber: str
 
     if (voteError) throw new Error(`Failed to record vote: ${voteError.message}`);
 
-    // 2. Mark the voter as having voted
     const { error: updateError } = await supabase
         .from('voters')
         .update({ has_voted: true })
-        .eq('username', voterRegNumber);
+        .eq('registration_number', voterRegNumber);
 
     if (updateError) {
-        // This is a critical issue, might need manual reconciliation
         console.error(`CRITICAL: Vote for ${voterRegNumber} recorded, but failed to mark as voted.`);
         throw new Error(`Failed to update voter status: ${updateError.message}`);
     }
@@ -109,7 +146,7 @@ export const fetchResults = async (): Promise<ResultsStats> => {
 
     const { data: physicalVotes, error: physicalError } = await supabase.from('physical_votes').select('votes');
     if (physicalError) throw new Error(physicalError.message);
-
+    
     const { data: onlineVotes, error: onlineError } = await supabase.from('votes').select('votes');
     if (onlineError) throw new Error(onlineError.message);
     
@@ -126,15 +163,20 @@ export const fetchResults = async (): Promise<ResultsStats> => {
             voteCounts[c.name] = 0;
         });
 
+// Fix: Add type guards to safely handle `record.votes` which might be `unknown`.
         allVotes.forEach(record => {
-            const vote = record.votes as VotePayload;
-            if (vote && vote[position] && voteCounts.hasOwnProperty(vote[position])) {
-                voteCounts[vote[position]]++;
+            const vote = record.votes;
+            if (typeof vote === 'object' && vote !== null) {
+                const candidate = (vote as VotePayload)[position];
+                if (typeof candidate === 'string' && Object.prototype.hasOwnProperty.call(voteCounts, candidate)) {
+                    voteCounts[candidate]++;
+                }
             }
         });
 
         const totalPositionVotes = Object.values(voteCounts).reduce((sum, count) => sum + count, 0);
 
+// Fix: Ensure `position` is treated as a string when used as an index.
         resultsByPosition[position] = Object.entries(voteCounts)
             .map(([candidate, votes]) => ({
                 candidate,
