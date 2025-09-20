@@ -65,7 +65,7 @@ export const startVotingProcess = async (regNumber: string, studentName: string)
         .from('voters')
         .insert({
             username: upperRegNumber,
-            password: null,
+            password: '',
             full_name: registration.student_name,
             registration_number: upperRegNumber,
             has_voted: false,
