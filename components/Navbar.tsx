@@ -65,7 +65,7 @@ const Navbar: React.FC<NavbarProps> = ({ currentView, setView, logoutAdmin }) =>
                 <ul className="flex flex-col items-center justify-center h-full gap-6 text-xl">
                     <NavLink icon="fa-user-check" label="Registration" isActive={currentView === 'voterRegistration'} onClick={() => handleLinkClick('voterRegistration')} />
                     <NavLink icon="fa-vote-yea" label="Voting Booth" isActive={currentView === 'votingBooth'} onClick={() => handleLinkClick('votingBooth')} />
-                    <NavLink icon="fa-chart-bar" label="Live Results" isActive={currentView === 'results'} onClick={() => handleLinkClick('results')} />
+                    
                     <NavLink icon="fa-sign-out-alt" label="Logout" isActive={false} onClick={handleLogoutClick} />
                 </ul>
             </div>
