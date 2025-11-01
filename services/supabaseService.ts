@@ -5,12 +5,10 @@ import type { Candidate, VotePayload, Admin, ResultsStats, Voter } from '../type
 const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
 export const loginAdmin = async (username: string, password: string): Promise<Admin> => {
-    const normalizedUsername = username.trim();
-
     const { data, error } = await supabase
         .from('directors')
         .select('*')
-        .eq('username', normalizedUsername)
+        .eq('username', username)
         .eq('password', password)
         .single();
 
@@ -19,66 +17,64 @@ export const loginAdmin = async (username: string, password: string): Promise<Ad
     return { username: data.username };
 };
 
-// --- FINAL UPDATED startVotingProcess FUNCTION (FIXED PASSWORD CONSTRAINT) ---
+// --- MODIFIED startVotingProcess FUNCTION (FIXED) ---
 export const startVotingProcess = async (regNumber: string, program: string): Promise<void> => {
-    // 1. Normalize the inputs for robust matching and data integrity
-    const normalizedRegNumber = regNumber.trim().toUpperCase(); 
-    const normalizedProgram = program.trim();
-
-    // -------------------------------------------------------------------------
-    // STEP 1: EXISTENCE CHECK (against the Master 'registrations' List)
-    // -------------------------------------------------------------------------
-    const { count, error: regError } = await supabase
+    
+    // Step 1: Check if the registration number exists in the 'registrations' table (Verification of Identity)
+    const { data: registrationData, error: registrationError } = await supabase
         .from('registrations')
-        .select('*', { count: 'exact', head: true })
-        .eq('registration_number', normalizedRegNumber);
+        .select('registration_number')
+        .eq('registration_number', regNumber) 
+        .maybeSingle();
 
-    if (regError || count === 0) {
-        const errorMessage = (regError && regError.message !== 'JSON object requested, multiple rows found') 
-            ? `Database error during list check: ${regError.message}`
-            : 'Verification failed: Registration number not found in the official student list.';
-        throw new Error(errorMessage);
+    if (registrationError) {
+        throw new Error(`Database error during registration check: ${registrationError.message}`);
     }
 
+    // Check 1: Existence check
+    if (!registrationData) {
+        throw new Error('Verification failed: Registration number not found in the official registrations list.');
+    }
 
-    // -------------------------------------------------------------------------
-    // STEP 2: VOTED STATUS CHECK (against the 'voters' tracking table)
-    // -------------------------------------------------------------------------
-    const { data: voterData, error: voterCheckError } = await supabase
+    // Step 2: Check if the registration number already exists in the 'voters' table (Check for already voted/processed)
+    const { data: voterData, error: voterError } = await supabase
         .from('voters')
-        .select('has_voted')
-        .eq('username', normalizedRegNumber)
-        .single();
-    
-    if (voterData && voterData.has_voted) {
-        throw new Error('This student has already cast their vote.');
+        .select('registration_number')
+        .eq('registration_number', regNumber)
+        .maybeSingle();
+
+    if (voterError) {
+        throw new Error(`Database error during voter check: ${voterError.message}`);
     }
 
-    // -------------------------------------------------------------------------
-    // STEP 3: RECORD/UPDATE VOTER using UPSERT (FIXES THE INSERT/CONSTRAINT ERROR)
-    // -------------------------------------------------------------------------
-    
-    // Data to be inserted or updated
-    const voterRecord = {
-        username: normalizedRegNumber, 
-        program: normalizedProgram, 
-        has_voted: false, 
-        // 👈 THE FIX: Provide a non-null, placeholder password value as required by the table
-        password: 'NO_PHYSICAL_LOGIN_REQUIRED', 
-    };
+    // Check 2: Already Voted Check
+    if (voterData) {
+        throw new Error('This student has already been processed or has cast their vote.');
+    }
 
-    const { error: upsertError } = await supabase
+    // Step 3: Voter is valid and hasn't voted. ADD the voter to the 'voters' table.
+    const { error: insertError } = await supabase
         .from('voters')
-        .upsert(voterRecord, { onConflict: 'username' });
+        .insert({ 
+            registration_number: regNumber, 
+            program: program, 
+            has_voted: false,
+            // FIX 1: Provide mandatory 'username'
+            username: regNumber, 
+            // FIX 2: Provide mandatory 'password' placeholder
+            password: '' 
+        }); 
 
-    if (upsertError) {
-        console.error("Voter upsert failed:", upsertError.message);
-        throw new Error(`Failed to initialize voter tracking record. Details: ${upsertError.message}`); 
+    if (insertError) {
+        console.error("Voter insert failed:", insertError.message);
+        throw new Error(`Failed to initialize voting session for student.`);
     }
     
-    // Student is confirmed and ready to vote.
+    // If we reach here, verification is successful.
 };
-// --- END FINAL startVotingProcess FUNCTION ---
+// --- END MODIFIED startVotingProcess FUNCTION (FIXED) ---
+
+// ---
 
 export const fetchCandidates = async (): Promise<Candidate[]> => {
     const { data, error } = await supabase
@@ -115,32 +111,35 @@ export const getLiveVoteCount = async (): Promise<number> => {
 };
 
 
+// --- MODIFIED submitPhysicalVote FUNCTION ---
 export const submitPhysicalVote = async (votes: VotePayload, voterRegNumber: string, adminOperator: string) => {
-    const normalizedRegNumber = voterRegNumber.trim().toUpperCase();
-
     // 1. Record the vote in physical_votes table
     const { error: voteError } = await supabase
         .from('physical_votes')
         .insert([{ 
             votes: votes,
-            voter_reg_number: normalizedRegNumber,
+            voter_reg_number: voterRegNumber,
             voteType: 'physical',
-            adminOperator: adminOperator.trim()
+            adminOperator: adminOperator
         }]);
 
     if (voteError) throw new Error(`Failed to record vote: ${voteError.message}`);
 
-    // 2. Mark the voter as having voted
+    // 2. Mark the voter as having voted in the 'voters' table
     const { error: updateError } = await supabase
         .from('voters')
         .update({ has_voted: true })
-        .eq('username', normalizedRegNumber);
+        .eq('registration_number', voterRegNumber);
 
     if (updateError) {
-        console.error(`CRITICAL: Vote for ${normalizedRegNumber} recorded, but failed to mark as voted.`);
+        // This is a critical issue, might need manual reconciliation
+        console.error(`CRITICAL: Vote for ${voterRegNumber} recorded, but failed to mark as voted.`);
         throw new Error(`Failed to update voter status: ${updateError.message}`);
     }
 };
+// --- END MODIFIED submitPhysicalVote FUNCTION ---
+
+// ---
 
 export const fetchResults = async (): Promise<ResultsStats> => {
     const { data: candidates, error: candidatesError } = await supabase.from('candidates').select('name, position');
