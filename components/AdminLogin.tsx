@@ -1,4 +1,3 @@
-
 import React, { useState } from 'react';
 import type { Admin } from '../types';
 import { loginAdmin } from '../services/supabaseService';
@@ -32,39 +31,105 @@ const AdminLogin: React.FC<AdminLoginProps> = ({ onLoginSuccess }) => {
     };
 
     return (
-        <div className="bg-white/10 dark:bg-gray-800/50 backdrop-blur-sm shadow-2xl rounded-2xl p-8 max-w-md mx-auto animate-fade-in">
-            <h2 className="text-3xl font-bold text-center text-white mb-2">Admin Login</h2>
-            <p className="text-center text-gray-300 mb-6">Election administrators only.</p>
-            <form onSubmit={handleSubmit}>
-                <div className="space-y-4">
+        <div className="min-h-screen bg-gray-100 flex items-center justify-center p-4">
+            {/* Card Container */}
+            <div className="bg-white shadow-2xl rounded-2xl p-10 max-w-md w-full mx-auto border border-gray-300">
+                {/* Header */}
+                <div className="text-center mb-8">
+                    <h2 className="text-3xl font-bold text-gray-900 mb-2">Admin Login</h2>
+                    <p className="text-gray-600">Election administrators only.</p>
+                </div>
+
+                <form onSubmit={handleSubmit} className="space-y-6">
+                    {/* Username Input */}
                     <input
                         type="text"
                         id="admin-username"
                         placeholder="Admin Username"
                         value={username}
                         onChange={(e) => setUsername(e.target.value)}
-                        className="w-full px-4 py-3 bg-gray-200/80 dark:bg-gray-700 text-gray-800 dark:text-white rounded-lg border border-transparent focus:outline-none focus:ring-2 focus:ring-blue-500 transition"
                         disabled={isLoading}
+                        className={`
+                            w-full px-5 py-4 
+                            bg-white border border-gray-400 rounded-xl
+                            text-gray-900 placeholder:text-gray-500
+                            text-lg font-medium
+                            focus:outline-none focus:ring-2 focus:ring-gray-700 focus:border-gray-700
+                            transition-all duration-200
+                            disabled:bg-gray-50 disabled:text-gray-400 disabled:cursor-not-allowed
+                        `}
                     />
+
+                    {/* Password Input */}
                     <input
                         type="password"
                         id="admin-password"
                         placeholder="Admin Password"
                         value={password}
                         onChange={(e) => setPassword(e.target.value)}
-                        className="w-full px-4 py-3 bg-gray-200/80 dark:bg-gray-700 text-gray-800 dark:text-white rounded-lg border border-transparent focus:outline-none focus:ring-2 focus:ring-blue-500 transition"
                         disabled={isLoading}
+                        className={`
+                            w-full px-5 py-4 
+                            bg-white border border-gray-400 rounded-xl
+                            text-gray-900 placeholder:text-gray-500
+                            text-lg font-medium
+                            focus:outline-none focus:ring-2 focus:ring-gray-700 focus:border-gray-700
+                            transition-all duration-200
+                            disabled:bg-gray-50 disabled:text-gray-400 disabled:cursor-not-allowed
+                        `}
                     />
-                </div>
-                <button
-                    type="submit"
-                    className="w-full mt-6 py-3 px-4 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-lg shadow-lg transition-transform transform hover:scale-105 disabled:bg-gray-400 disabled:cursor-not-allowed"
-                    disabled={isLoading}
-                >
-                    {isLoading ? 'Logging In...' : 'Login as Admin'}
-                </button>
-                {error && <p className="text-red-400 text-center mt-4">{error}</p>}
-            </form>
+
+                    {/* Submit Button */}
+                    <button
+                        type="submit"
+                        disabled={isLoading}
+                        className={`
+                            w-full py-4 
+                            bg-gray-900 hover:bg-black 
+                            text-white font-bold text-lg
+                            rounded-xl shadow-lg
+                            transition-all duration-200 ease-in-out
+                            disabled:bg-gray-300 disabled:text-gray-500 disabled:shadow-none disabled:cursor-not-allowed
+                            flex items-center justify-center
+                        `}
+                    >
+                        {isLoading ? (
+                            <>
+                                <svg
+                                    className="animate-spin -ml-1 mr-3 h-5 w-5 text-white"
+                                    xmlns="http://www.w3.org/2000/svg"
+                                    fill="none"
+                                    viewBox="0 0 24 24"
+                                >
+                                    <circle
+                                        className="opacity-25"
+                                        cx="12"
+                                        cy="12"
+                                        r="10"
+                                        stroke="currentColor"
+                                        strokeWidth="4"
+                                    />
+                                    <path
+                                        className="opacity-75"
+                                        fill="currentColor"
+                                        d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+                                    />
+                                </svg>
+                                Logging In...
+                            </>
+                        ) : (
+                            'Login as Admin'
+                        )}
+                    </button>
+
+                    {/* Error Message */}
+                    {error && (
+                        <p className="text-center text-red-600 font-medium text-base animate-pulse">
+                            {error}
+                        </p>
+                    )}
+                </form>
+            </div>
         </div>
     );
 };
