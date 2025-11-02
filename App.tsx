@@ -71,7 +71,7 @@ const App: React.FC = () => {
     };
 
     return (
-        <div className="font-poppins bg-gradient-to-br from-blue-700 to-gray-800 dark:from-gray-900 dark:to-black min-h-screen text-gray-800 dark:text-gray-200 transition-colors duration-300">
+        <div className="font-poppins bg-black min-h-screen text-gray-800 dark:text-gray-200 transition-colors duration-300">
             {admin && (
                 <Navbar
                     currentView={view}
